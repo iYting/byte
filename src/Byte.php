@@ -2,6 +2,8 @@
 
 namespace Applet\Assemble;
 
+use support\Log;
+
 class Byte
 {
 
@@ -14,13 +16,14 @@ class Byte
     private $notify_url;
     private $settle_url;
     private $token;
+    private $baseUrl = 'https://developer.toutiao.com';
     private $codeUrl = 'https://minigame.zijieapi.com/mgplatform/api/apps/jscode2session?';
-    private $tokenUrl = 'https://developer.toutiao.com/api/apps/v2/token';
-    protected $payUrl = 'https://developer.toutiao.com/api/apps/ecpay/v1/create_order';
-    protected $query = 'https://developer.toutiao.com/api/apps/ecpay/v1/query_order';
-    protected $refundUrl = 'https://developer.toutiao.com/api/apps/ecpay/v1/create_refund';
-    protected $settle = 'https://developer.toutiao.com/api/apps/ecpay/v1/settle';
-    protected $sendMsgUrl = 'https://developer.toutiao.com/api/apps/subscribe_notification/developer/v1/notify';
+    private $tokenUrl = '/apps/v2/token';
+    protected $payUrl = '/apps/ecpay/v1/create_order';
+    protected $query = '/apps/ecpay/v1/query_order';
+    protected $refundUrl = '/apps/ecpay/v1/create_refund';
+    protected $settle = '/apps/ecpay/v1/settle';
+    protected $sendMsgUrl = '/apps/subscribe_notification/developer/v1/notify';
     private $notifyOrder;
 
     public static function init($config)
@@ -43,6 +46,9 @@ class Byte
         if (empty($config['token'])) {
             throw new \Exception('not empty token');
         }
+        if (empty($config['baseUrl'])) {
+            throw new \Exception('not empty token');
+        }
         $class = new self();
         $class->app_id = $config['app_id'];
         $class->secret = $config['secret'];
@@ -52,6 +58,7 @@ class Byte
         $class->settle_url = isset($config['settle_url']) ? $config['settle_url'] : $config['notify_url'];
         $class->notify_url = $config['notify_url'];
         $class->valid_time = isset($config['valid_time']) ? $config['valid_time'] : time() + 900;
+        $class->baseUrl = $config['baseUrl'];
         return $class;
     }
     /**
@@ -89,7 +96,13 @@ class Byte
         $orderParam["valid_time"] = $this->valid_time;
         $orderParam["app_id"] = $this->app_id;
         $data = json_encode(["sign" => $this->sign($orderParam)] + $orderParam);
-        $this->orderParam = json_decode($this->curl_post($this->payUrl, $data), true);
+        $payUrl = $this->baseUrl . $this->payUrl;
+        Log::error($data);
+        Log::error($payUrl);
+
+        $this->orderParam = json_decode($this->curl_post($payUrl, $data), true);
+        Log::error( $this->orderParam);
+
         return $this;
     }
     /**
@@ -128,7 +141,7 @@ class Byte
             'appid' => $this->app_id,
             'secret' => $this->secret,
         ];
-
+        $tokenUrl = $this->baseUrl . $this->tokenUrl;
         return json_decode($this->curl_post($this->tokenUrl, json_encode($arr)), true);
     }
     /**
@@ -176,6 +189,7 @@ class Byte
     {
         $order['notify_url'] = $this->notify_url;
         $order['app_id'] = $this->app_id;
+        $refundUrl = $this->baseUrl . $this->refundUrl;
         return json_decode($this->curl_post($this->refundUrl, json_encode(['sign' => $this->sign($order)] + $order)), true);
     }
     /**
@@ -193,6 +207,7 @@ class Byte
             'app_id' => $this->app_id,
         ];
         $order['sign'] = $this->sign($order);
+        $query = $this->baseUrl . $this->query;
         return json_decode($this->curl_post($this->query, json_encode($order)), true);
     }
     /**
@@ -213,7 +228,8 @@ class Byte
             'cp_extra' => $order['cp_extra'],
         ];
         $data['sign'] = $this->sign($data);
-        $result = json_decode($this->curl_post($this->settle, json_encode($data)), true);
+        $settle = $this->baseUrl . $this->settle;
+        $result = json_decode($this->curl_post($settle, json_encode($data)), true);
         return $result;
     }
     /**
@@ -226,6 +242,7 @@ class Byte
     {
         $data['access_token'] = $token;
         $data['app_id'] = $this->app_id;
+        $sendMsgUrl = $this->baseUrl . $this->sendMsgUrl;
         return json_decode($this->curl_post($this->sendMsgUrl, json_encode($data)), true);
     }
     /**
@@ -301,5 +318,28 @@ class Byte
         }
         curl_close($ch);
         return $output;
+    }
+
+    /**
+     * 订单同步
+     * @param string $open_id
+     * @param int $order_status
+     * @param array $order_detail
+     * @param string $extra
+     * @return array
+     * @throws GuzzleException
+     * @throws HttpException
+     * @throws InvalidConfigException
+     */
+    public function push(string $open_id, int $order_status, array $order_detail, string $extra = ''): array
+    {
+        $app_name = 'douyin';
+        $order_type = 0;
+        $update_time = intval(microtime(true));
+        $order_detail = json_encode($order_detail);
+        $params = compact('open_id', 'order_status', 'order_detail', 'extra', 'app_name', 'order_type', 'update_time');
+
+        return json_decode($this->curl_post($this->sendMsgUrl, json_encode($data)), true);
+
     }
 }
